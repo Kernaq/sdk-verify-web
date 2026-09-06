@@ -1,0 +1,41 @@
+{
+  "name": "@kernaq/verify",
+  "version": "1.0.0",
+  "description": "Drop-in KYC verification UI for web — customizable Web Component for document capture, selfie, and liveness.",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "rollup -c rollup.config.mjs",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "kyc",
+    "identity",
+    "verification",
+    "web-component",
+    "liveness",
+    "kernaq"
+  ],
+  "author": "Kernaq",
+  "license": "SEE LICENSE IN LICENSE",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-swc": "^0.4.1",
+    "@swc/core": "^1.16.2",
+    "@typescript/typescript6": "^6.0.2",
+    "rollup": "^4.63.1",
+    "rollup-plugin-dts": "^6.5.1",
+    "tslib": "^2.8.1",
+    "typescript": "^7.0.2"
+  }
+}

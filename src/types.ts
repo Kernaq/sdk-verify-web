@@ -2,7 +2,24 @@
  * @kernaq/verify — public types
  */
 
-export type VerifyStep = 'intro' | 'document' | 'selfie' | 'liveness' | 'processing' | 'result'
+export type VerifyStep = 'intro' | 'doc-front' | 'doc-back' | 'selfie' | 'liveness' | 'processing' | 'result'
+
+/** Liveness challenge tasks shown to the user */
+export type LivenessTask = 'blink' | 'turn-left' | 'turn-right' | 'nod' | 'open-mouth'
+
+/**
+ * The capture steps the developer wants to include.
+ * Default is all three. Pass a subset to run only what you need.
+ *
+ * 'document' = front + back capture
+ * 'selfie'   = auto-captured selfie with quality guidance
+ * 'liveness' = randomised action challenges
+ *
+ * @example steps="selfie,liveness"   // skip document capture
+ * @example steps="liveness"          // liveness check only
+ * @example steps="document"          // document scan only
+ */
+export type VerifyStepName = 'document' | 'selfie' | 'liveness'
 
 export type DocumentType =
   | 'national_id'
@@ -38,8 +55,24 @@ export interface VerifyConfig {
   /** Enable sandbox mode (uses k_test_ keys, no billing) */
   sandbox?: boolean
 
+  /**
+   * Which capture steps to include. Default: all three.
+   * Pass a subset when you only need specific captures.
+   * @example steps={['selfie', 'liveness']}
+   */
+  steps?: VerifyStepName[]
+
   /** Liveness recording duration in milliseconds. Default: 3000 */
   livenessDuration?: number
+
+  /**
+   * Number of liveness tasks to present. Default: 2.
+   * Tasks are randomly selected from the built-in pool.
+   */
+  livenessTaskCount?: number
+
+  /** Blur rejection threshold — lower = stricter. Default: 80. Range: 20–200 */
+  blurThreshold?: number
 
   /** Theming */
   theme?: VerifyTheme
@@ -67,20 +100,20 @@ export interface VerifyLocale {
   intro_title: string
   intro_body: string
   intro_cta: string
-  doc_title: string
-  doc_instruction: string
+  doc_front_title: string
+  doc_front_instruction: string
+  doc_back_title: string
+  doc_back_instruction: string
   doc_capture_btn: string
   doc_retake_btn: string
-  doc_next_btn: string
   selfie_title: string
   selfie_instruction: string
   selfie_capture_btn: string
   selfie_retake_btn: string
-  selfie_next_btn: string
   liveness_title: string
-  liveness_instruction: string
-  liveness_start_btn: string
-  liveness_recording: string
+  liveness_ready: string
+  liveness_task_prefix: string
+  liveness_complete: string
   processing_title: string
   result_pass_title: string
   result_pass_body: string
@@ -89,6 +122,7 @@ export interface VerifyLocale {
   result_review_title: string
   result_review_body: string
   error_camera_denied: string
+  error_blur: string
   error_quality: string
   error_network: string
 }

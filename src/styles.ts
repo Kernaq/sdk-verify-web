@@ -1,138 +1,113 @@
 /**
  * Scoped Shadow DOM styles for <kernaq-verify>.
  * All theming is driven by CSS custom properties set on :host.
- * The dev never sees these classes — they're encapsulated in the shadow root.
  */
 export function getStyles(mode: 'light' | 'dark' = 'light'): string {
   const dark = mode === 'dark'
   return `
     :host {
-      --kq-accent:      var(--kernaq-accent-color,      #111827);
-      --kq-bg:          var(--kernaq-background-color,  ${dark ? '#1a1a2e' : '#ffffff'});
-      --kq-text:        var(--kernaq-text-color,        ${dark ? '#f9fafb' : '#111827'});
-      --kq-subtext:     ${dark ? '#9ca3af' : '#6b7280'};
-      --kq-border:      ${dark ? '#374151' : '#e5e7eb'};
-      --kq-card-bg:     ${dark ? '#111827' : '#f9fafb'};
-      --kq-radius:      var(--kernaq-border-radius,     12px);
-      --kq-font:        var(--kernaq-font-family,       inherit);
+      --kq-accent:       var(--kernaq-accent-color,     ${dark ? '#e5e7eb' : '#111827'});
+      --kq-accent-inv:   ${dark ? '#111827' : '#ffffff'};
+      --kq-bg:           var(--kernaq-background-color, ${dark ? '#0f0f0f' : '#ffffff'});
+      --kq-surface:      ${dark ? '#1a1a1a' : '#f7f7f7'};
+      --kq-surface-2:    ${dark ? '#242424' : '#efefef'};
+      --kq-text:         var(--kernaq-text-color,       ${dark ? '#f5f5f5' : '#0f0f0f'});
+      --kq-text-2:       ${dark ? '#888888' : '#6b7280'};
+      --kq-border:       ${dark ? '#2a2a2a' : '#e5e5e5'};
+      --kq-error-bg:     ${dark ? 'rgba(239,68,68,0.1)' : '#fef2f2'};
+      --kq-error-text:   ${dark ? '#f87171' : '#b91c1c'};
+      --kq-error-border: ${dark ? 'rgba(239,68,68,0.25)' : '#fecaca'};
+      --kq-radius:       var(--kernaq-border-radius,    14px);
+      --kq-font:         var(--kernaq-font-family,      -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif);
       display: block;
       font-family: var(--kq-font);
     }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     /* ── Overlay ── */
     .kq-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.55);
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
       display: flex;
       align-items: center;
       justify-content: center;
       z-index: 99999;
       padding: 16px;
-      animation: kqFadeIn 0.2s ease;
+      animation: kqFadeIn 0.18s ease;
     }
+    @keyframes kqFadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-    @keyframes kqFadeIn {
-      from { opacity: 0; }
-      to   { opacity: 1; }
-    }
-
-    /* ── Modal ── */
+    /* ── Modal — fixed 600px, never grows or shrinks ── */
     .kq-modal {
       background: var(--kq-bg);
+      border: 1px solid var(--kq-border);
       border-radius: var(--kq-radius);
-      width: 100%;
-      max-width: 440px;
-      max-height: 90vh;
-      overflow-y: auto;
-      box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+      width: 420px;
+      height: 600px;
+      overflow: hidden;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.04);
       display: flex;
       flex-direction: column;
-      animation: kqSlideUp 0.25s ease;
-      position: relative;
     }
+    /* No slide-up animation — modal shell is persistent, only content swaps */
 
-    @keyframes kqSlideUp {
-      from { transform: translateY(20px); opacity: 0; }
-      to   { transform: translateY(0);    opacity: 1; }
-    }
+    /* ── Header — hidden. Footer "Secured by Kernaq" handles branding ── */
+    .kq-header { display: none; }
 
-    /* ── Header ── */
-    .kq-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 20px 24px 0;
+    /* Content slots — fade in on swap */
+    .kq-slot-body, .kq-slot-footer {
+      display: contents;
     }
-
-    .kq-logo {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--kq-accent);
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-    }
-
-    .kq-close {
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: var(--kq-subtext);
-      padding: 4px;
-      line-height: 1;
-      font-size: 20px;
-      border-radius: 6px;
-      transition: background 0.15s;
-    }
-    .kq-close:hover { background: var(--kq-card-bg); }
-
-    /* ── Progress bar ── */
-    .kq-progress {
-      display: flex;
-      gap: 6px;
-      padding: 16px 24px 0;
-    }
-    .kq-progress-dot {
-      flex: 1;
-      height: 3px;
-      border-radius: 999px;
-      background: var(--kq-border);
-      transition: background 0.3s;
-    }
-    .kq-progress-dot.active  { background: var(--kq-accent); }
-    .kq-progress-dot.done    { background: var(--kq-accent); opacity: 0.4; }
 
     /* ── Body ── */
     .kq-body {
-      padding: 24px;
-      flex: 1;
+      padding: 32px 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
     }
 
+    /* Camera-mode body: stretches to fill so viewport takes remaining space */
+    .kq-body.kq-has-camera {
+      flex: 1;
+      min-height: 0;
+      padding-bottom: 16px;
+      overflow: hidden;
+    }
+
+    /* ── Text — centred on intro + camera steps ── */
+    .kq-heading {
+      text-align: center;
+      margin-bottom: 4px;
+    }
     .kq-title {
       font-size: 20px;
       font-weight: 700;
       color: var(--kq-text);
-      margin: 0 0 8px;
+      line-height: 1.2;
+      letter-spacing: -0.025em;
     }
-
     .kq-subtitle {
-      font-size: 14px;
-      color: var(--kq-subtext);
-      margin: 0 0 24px;
-      line-height: 1.5;
+      font-size: 13.5px;
+      color: var(--kq-text-2);
+      line-height: 1.55;
+      margin-top: 6px;
     }
 
     /* ── Camera viewport ── */
     .kq-viewport {
       position: relative;
       width: 100%;
-      aspect-ratio: 4/3;
+      flex: 1;
+      min-height: 200px;
       border-radius: calc(var(--kq-radius) - 4px);
       overflow: hidden;
       background: #000;
-      margin-bottom: 16px;
     }
-
     .kq-video {
       width: 100%;
       height: 100%;
@@ -140,14 +115,46 @@ export function getStyles(mode: 'light' | 'dark' = 'light'): string {
       display: block;
     }
 
-    /* Document frame guide */
+    /* Camera permission request overlay */
+    .kq-cam-prompt {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: ${dark ? '#141414' : '#111'};
+    }
+    .kq-cam-prompt-icon { color: #555; }
+    .kq-cam-prompt p { font-size: 12px; color: #555; }
+
+    /* Document corner guides */
     .kq-frame-guide {
       position: absolute;
-      inset: 8%;
-      border: 2px solid rgba(255,255,255,0.6);
-      border-radius: 8px;
+      inset: 8% 6%;
       pointer-events: none;
-      box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
+    }
+    .kq-frame-corner {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-color: rgba(255,255,255,0.9);
+      border-style: solid;
+    }
+    .kq-frame-corner.tl { top: 0; left: 0; border-width: 2px 0 0 2px; border-radius: 3px 0 0 0; }
+    .kq-frame-corner.tr { top: 0; right: 0; border-width: 2px 2px 0 0; border-radius: 0 3px 0 0; }
+    .kq-frame-corner.bl { bottom: 0; left: 0; border-width: 0 0 2px 2px; border-radius: 0 0 0 3px; }
+    .kq-frame-corner.br { bottom: 0; right: 0; border-width: 0 2px 2px 0; border-radius: 0 0 3px 0; }
+    .kq-frame-dim {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+      clip-path: polygon(
+        0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%,
+        6% 8%, 6% 92%, 94% 92%, 94% 8%, 6% 8%
+      );
+      pointer-events: none;
     }
 
     /* Selfie oval guide */
@@ -155,82 +162,166 @@ export function getStyles(mode: 'light' | 'dark' = 'light'): string {
       position: absolute;
       left: 50%;
       top: 50%;
-      transform: translate(-50%, -50%);
-      width: 65%;
+      transform: translate(-50%, -52%);
+      width: 60%;
       aspect-ratio: 3/4;
-      border: 2px solid rgba(255,255,255,0.6);
+      border: 2px solid rgba(255,255,255,0.75);
       border-radius: 50%;
       pointer-events: none;
-      box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .kq-oval-guide.kq-oval-guide-ok {
+      border-color: #4ade80;
+      box-shadow: 0 0 0 2px rgba(74,222,128,0.3);
     }
 
-    /* Recording indicator */
-    .kq-recording-badge {
+    /* Live selfie instruction pill */
+    .kq-selfie-pill {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(6px);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 7px 18px;
+      border-radius: 999px;
+      border: 1.5px solid rgba(255,255,255,0.15);
+      white-space: nowrap;
+      pointer-events: none;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .kq-selfie-pill.kq-selfie-pill-ok {
+      background: rgba(22,163,74,0.8);
+      border-color: rgba(134,239,172,0.5);
+    }
+
+    /* Recording badge */
+    .kq-rec-badge {
       position: absolute;
       top: 10px;
       left: 10px;
-      background: rgba(220, 38, 38, 0.85);
-      color: #fff;
-      font-size: 12px;
-      font-weight: 600;
-      padding: 4px 10px;
-      border-radius: 999px;
       display: flex;
       align-items: center;
       gap: 6px;
+      background: rgba(0,0,0,0.65);
+      border: 1px solid rgba(239,68,68,0.5);
+      color: #ef4444;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      padding: 4px 9px;
+      border-radius: 5px;
     }
-    .kq-recording-dot {
-      width: 8px;
-      height: 8px;
+    .kq-rec-dot {
+      width: 7px; height: 7px;
       border-radius: 50%;
-      background: #fff;
-      animation: kqPulse 1s ease-in-out infinite;
+      background: #ef4444;
+      animation: kqBlink 1.1s ease-in-out infinite;
     }
-    @keyframes kqPulse {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.3; }
-    }
+    @keyframes kqBlink { 0%,100%{ opacity:1; } 50%{ opacity:0.2; } }
 
-    /* Liveness countdown ring */
-    .kq-countdown {
+    /* Liveness in-video overlay */
+    .kq-live-overlay {
       position: absolute;
-      bottom: 12px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 52px;
-      height: 52px;
+      bottom: 0; left: 0; right: 0;
+      padding: 10px 14px 12px;
+      background: linear-gradient(transparent, rgba(0,0,0,0.75));
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
-    .kq-countdown svg { transform: rotate(-90deg); }
-    .kq-countdown circle {
-      fill: none;
-      stroke: rgba(255,255,255,0.3);
-      stroke-width: 4;
-    }
-    .kq-countdown .progress {
-      stroke: #fff;
-      stroke-linecap: round;
-      transition: stroke-dashoffset 0.1s linear;
-    }
-    .kq-countdown-text {
-      position: absolute;
-      inset: 0;
+    .kq-live-task-pill {
       display: flex;
       align-items: center;
-      justify-content: center;
-      color: #fff;
-      font-size: 16px;
+      gap: 8px;
+    }
+    .kq-live-task-num {
+      font-size: 10.5px;
       font-weight: 700;
+      letter-spacing: 0.06em;
+      color: rgba(255,255,255,0.55);
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .kq-live-task-text {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.2;
+    }
+    .kq-live-bar-wrap {
+      height: 3px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .kq-live-bar-fill {
+      height: 100%;
+      background: #fff;
+      border-radius: 999px;
+      transition: width 0.08s linear;
     }
 
-    /* Preview captured image */
-    .kq-preview {
-      width: 100%;
-      aspect-ratio: 4/3;
-      border-radius: calc(var(--kq-radius) - 4px);
-      object-fit: cover;
-      margin-bottom: 16px;
-      border: 2px solid var(--kq-border);
+    /* Liveness task dots */
+    .kq-task-dots {
+      display: flex;
+      gap: 6px;
     }
+    .kq-task-dot {
+      flex: 1;
+      height: 2.5px;
+      border-radius: 999px;
+      background: var(--kq-border);
+    }
+    .kq-task-dot.done   { background: var(--kq-accent); opacity: 0.35; }
+    .kq-task-dot.active { background: var(--kq-accent); }
+
+    /* Captured thumbnail row */
+    .kq-thumb-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 10px;
+      background: var(--kq-surface);
+      border: 1px solid var(--kq-border);
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+    .kq-thumb {
+      width: 48px;
+      height: 32px;
+      object-fit: cover;
+      border-radius: 5px;
+      border: 1px solid var(--kq-border);
+      flex-shrink: 0;
+    }
+    .kq-thumb-label {
+      font-size: 12px;
+      color: var(--kq-text-2);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .kq-thumb-label svg { color: #16a34a; flex-shrink: 0; }
+
+    /* ── Hint strip ── */
+    .kq-hint {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      padding: 9px 11px;
+      background: var(--kq-surface);
+      border: 1px solid var(--kq-border);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--kq-text-2);
+      line-height: 1.45;
+      flex-shrink: 0;
+    }
+    .kq-hint svg { flex-shrink: 0; margin-top: 1px; }
 
     /* ── Buttons ── */
     .kq-btn {
@@ -239,110 +330,129 @@ export function getStyles(mode: 'light' | 'dark' = 'light'): string {
       justify-content: center;
       gap: 8px;
       width: 100%;
-      padding: 13px 20px;
-      border-radius: calc(var(--kq-radius) - 2px);
-      font-size: 15px;
+      padding: 12px 18px;
+      border-radius: calc(var(--kq-radius) - 4px);
+      font-size: 14px;
       font-weight: 600;
       cursor: pointer;
       border: none;
-      transition: opacity 0.15s, transform 0.1s;
+      transition: opacity 0.12s, transform 0.08s;
+      letter-spacing: -0.01em;
+      flex-shrink: 0;
     }
-    .kq-btn:active { transform: scale(0.98); }
-    .kq-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .kq-btn:active:not(:disabled) { transform: scale(0.985); }
+    .kq-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    .kq-btn-primary {
-      background: var(--kq-accent);
-      color: #fff;
-    }
-    .kq-btn-primary:hover:not(:disabled) { opacity: 0.88; }
+    .kq-btn-primary { background: var(--kq-accent); color: var(--kq-accent-inv); }
+    .kq-btn-primary:hover:not(:disabled) { opacity: 0.86; }
 
-    .kq-btn-secondary {
-      background: var(--kq-card-bg);
-      color: var(--kq-text);
+    .kq-btn-ghost {
+      background: transparent;
+      color: var(--kq-text-2);
       border: 1px solid var(--kq-border);
-      margin-top: 10px;
     }
-    .kq-btn-secondary:hover:not(:disabled) { opacity: 0.75; }
+    .kq-btn-ghost:hover:not(:disabled) { background: var(--kq-surface); color: var(--kq-text); }
 
-    /* ── Processing spinner ── */
-    .kq-spinner-wrap {
+    /* ── Processing ── */
+    .kq-processing {
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 48px 24px;
-      gap: 20px;
+      justify-content: center;
+      flex: 1;
+      min-height: 0;
+      padding: 32px 24px;
+      gap: 16px;
       text-align: center;
     }
     .kq-spinner {
-      width: 48px;
-      height: 48px;
-      border: 4px solid var(--kq-border);
+      width: 38px; height: 38px;
+      border: 2.5px solid var(--kq-border);
       border-top-color: var(--kq-accent);
       border-radius: 50%;
-      animation: kqSpin 0.8s linear infinite;
+      animation: kqSpin 0.75s linear infinite;
     }
-    @keyframes kqSpin {
-      to { transform: rotate(360deg); }
-    }
+    @keyframes kqSpin { to { transform: rotate(360deg); } }
+    .kq-processing .kq-title { font-size: 16px; text-align: center; }
+    .kq-processing .kq-subtitle { text-align: center; }
 
-    /* ── Result screen ── */
+    /* ── Result ── */
     .kq-result {
       display: flex;
       flex-direction: column;
+      padding: 28px 24px 20px;
+      gap: 14px;
       align-items: center;
-      padding: 40px 24px;
       text-align: center;
-      gap: 12px;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
     }
     .kq-result-icon {
-      width: 72px;
-      height: 72px;
-      border-radius: 50%;
+      width: 52px; height: 52px;
+      border-radius: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 32px;
       margin-bottom: 4px;
     }
-    .kq-result-icon.pass   { background: #d1fae5; }
-    .kq-result-icon.fail   { background: #fee2e2; }
-    .kq-result-icon.review { background: #fef3c7; }
+    .kq-result-icon.pass   { background: ${dark ? 'rgba(34,197,94,0.12)' : '#dcfce7'}; color: #16a34a; }
+    .kq-result-icon.fail   { background: ${dark ? 'rgba(239,68,68,0.12)' : '#fee2e2'}; color: #dc2626; }
+    .kq-result-icon.review { background: ${dark ? 'rgba(245,158,11,0.12)' : '#fef9c3'}; color: #ca8a04; }
+    .kq-result-details {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .kq-result-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 9px 12px;
+      background: var(--kq-surface);
+      border-radius: 8px;
+      font-size: 12.5px;
+      text-align: left;
+    }
+    .kq-result-row-label { color: var(--kq-text-2); }
+    .kq-result-row-val   { color: var(--kq-text); font-weight: 600; }
+    .kq-result-row-val.ok  { color: #16a34a; }
+    .kq-result-row-val.bad { color: #dc2626; }
 
     /* ── Error banner ── */
     .kq-error {
-      background: #fee2e2;
-      color: #b91c1c;
-      border-radius: 8px;
-      padding: 10px 14px;
-      font-size: 13px;
-      margin-bottom: 14px;
-    }
-
-    /* ── Intro illustration ── */
-    .kq-intro-steps {
       display: flex;
-      justify-content: center;
-      gap: 20px;
-      margin-bottom: 28px;
-    }
-    .kq-intro-step {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+      align-items: flex-start;
       gap: 8px;
-      font-size: 12px;
-      color: var(--kq-subtext);
+      background: var(--kq-error-bg);
+      color: var(--kq-error-text);
+      border: 1px solid var(--kq-error-border);
+      border-radius: 8px;
+      padding: 9px 11px;
+      font-size: 12.5px;
+      line-height: 1.45;
+      flex-shrink: 0;
     }
-    .kq-intro-step-icon {
-      width: 52px;
-      height: 52px;
-      border-radius: 14px;
-      background: var(--kq-card-bg);
-      border: 1px solid var(--kq-border);
+    .kq-error svg { flex-shrink: 0; margin-top: 1px; }
+
+    /* ── Footer ── */
+    .kq-footer {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
+      gap: 5px;
+      padding: 10px 20px 14px;
+      border-top: 1px solid var(--kq-border);
+      font-size: 11px;
+      color: var(--kq-text-2);
+      flex-shrink: 0;
     }
+    .kq-footer a {
+      color: var(--kq-text-2);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .kq-footer a:hover { color: var(--kq-text); }
   `
 }

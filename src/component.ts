@@ -288,62 +288,73 @@ export class KernaqVerify extends HTMLElement {
     const ctx = c.getContext('2d')!
     ctx.drawImage(v, 0, 0)
 
+    // ── Crop to the oval region ──────────────────────────────────────────────
     const ow = Math.round(W * 0.58)
     const oh = Math.round(ow * (4 / 3))
     const ox = Math.round((W - ow) / 2)
     const oy = Math.round((H - oh) / 2 - H * 0.02)
+    const ovalData = ctx.getImageData(ox, oy, ow, oh)
 
-    const ovalCanvas = document.createElement('canvas')
-    ovalCanvas.width = ow; ovalCanvas.height = oh
-    ovalCanvas.getContext('2d')!.drawImage(c, ox, oy, ow, oh, 0, 0, ow, oh)
+    // ── 1. Brightness check on full oval ─────────────────────────────────────
+    const lum = this._meanLum(ovalData.data)
+    if (lum < 55) {
+      this._updateSelfieOverlay('Move to better lighting', false)
+      this.selfieReadyFrames = 0
+      return
+    }
+    if (lum > 210) {
+      this._updateSelfieOverlay('Too bright — avoid direct light', false)
+      this.selfieReadyFrames = 0
+      return
+    }
 
-    const ovalBlob = await new Promise<Blob | null>(r => ovalCanvas.toBlob(b => r(b), 'image/jpeg', 0.85))
-    if (!ovalBlob) return
+    // ── 2. Blur check on oval crop ───────────────────────────────────────────
+    const blurScore = this._laplacianVariance(ovalData)
+    if (blurScore < 40) {
+      this._updateSelfieOverlay('Hold still', false)
+      this.selfieReadyFrames = 0
+      return
+    }
 
-    // Stricter thresholds — must be sharp, well-lit, face filling the oval
-    const report = await analyseImage(ovalBlob, {
-      minBlurScore:  40,
-      minBrightness: 55,
-      maxBrightness: 210,
-      minFillRatio:  0.18,
-    })
+    // ── 3. Skin-tone check — face must actually be in the oval ───────────────
+    // Uses YCbCr range that works across all skin tones
+    const skinFrac = this._skinFraction(ovalData)
+    if (skinFrac < 0.22) {
+      this._updateSelfieOverlay('Centre your face in the oval', false)
+      this.selfieReadyFrames = 0
+      return
+    }
+    if (skinFrac > 0.85) {
+      this._updateSelfieOverlay('Move further away', false)
+      this.selfieReadyFrames = 0
+      return
+    }
 
-    // Glasses glare: bright band across top 35% of oval (eye area)
-    const eyeH    = Math.round(oh * 0.35)
-    const eyeData = ctx.getImageData(ox, oy, ow, eyeH)
-    const eyeLum  = this._meanLum(eyeData.data)
-    const hasGlare = eyeLum > 190
-
-    // Hat/occlusion: very dark band across top 15% (forehead)
+    // ── 4. Hat/head covering — dark top band ─────────────────────────────────
     const hatH    = Math.round(oh * 0.15)
     const hatData = ctx.getImageData(ox, oy, ow, hatH)
     const hatLum  = this._meanLum(hatData.data)
-    const hasHat  = hatLum < 40
-
-    let instruction = ''
-    const passing = report.passed && !hasGlare && !hasHat
-
-    if (report.failures.includes('too_dark')) {
-      instruction = 'Move to better lighting'
-    } else if (report.failures.includes('too_bright')) {
-      instruction = 'Too bright — avoid direct light'
-    } else if (report.failures.includes('too_small')) {
-      instruction = 'Move closer'
-    } else if (hasHat) {
-      instruction = 'Remove hat or head covering'
-    } else if (hasGlare) {
-      instruction = 'Remove glasses'
-    } else if (report.failures.includes('too_blurry')) {
-      instruction = 'Hold still'
-    }
-
-    this._updateSelfieOverlay(instruction, passing)
-
-    if (passing) {
-      this.selfieReadyFrames++
-    } else {
+    if (hatLum < 35) {
+      this._updateSelfieOverlay('Remove hat or head covering', false)
       this.selfieReadyFrames = 0
+      return
     }
+
+    // ── 5. Glasses glare — bright eye band ───────────────────────────────────
+    // Check the middle 30-55% vertically (eye region)
+    const eyeTop  = Math.round(oh * 0.30)
+    const eyeHH   = Math.round(oh * 0.25)
+    const eyeData = ctx.getImageData(ox, oy + eyeTop, ow, eyeHH)
+    const eyeLum  = this._meanLum(eyeData.data)
+    if (eyeLum > 185) {
+      this._updateSelfieOverlay('Remove glasses', false)
+      this.selfieReadyFrames = 0
+      return
+    }
+
+    // ── All checks passed ────────────────────────────────────────────────────
+    this.selfieReadyFrames++
+    this._updateSelfieOverlay('', true)  // pill turns green, shows "Hold still…"
 
     if (this.selfieReadyFrames >= KernaqVerify.HOLD_FRAMES) {
       this.selfieCapturing = true
@@ -358,6 +369,44 @@ export class KernaqVerify extends HTMLElement {
         this._startSelfieAnalysis()
       }
     }
+  }
+
+  // ── Laplacian variance — sharpness proxy ──────────────────────────────────
+  private _laplacianVariance(imgData: ImageData): number {
+    const { data, width, height } = imgData
+    const gray: Float32Array = new Float32Array(width * height)
+    for (let i = 0; i < gray.length; i++) {
+      gray[i] = 0.299 * data[i * 4]! + 0.587 * data[i * 4 + 1]! + 0.114 * data[i * 4 + 2]!
+    }
+    let sum = 0, sumSq = 0, count = 0
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x
+        const lap =
+          -gray[idx - width - 1]! - gray[idx - width]! - gray[idx - width + 1]!
+          - gray[idx - 1]!        + 8 * gray[idx]!     - gray[idx + 1]!
+          - gray[idx + width - 1]! - gray[idx + width]! - gray[idx + width + 1]!
+        sum += lap; sumSq += lap * lap; count++
+      }
+    }
+    const mean = sum / count
+    return (sumSq / count) - mean * mean
+  }
+
+  // ── YCbCr skin-tone fraction — works across all skin tones ───────────────
+  private _skinFraction(imgData: ImageData): number {
+    const { data } = imgData
+    let skin = 0, total = 0
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i]!, g = data[i + 1]!, b = data[i + 2]!
+      const y  =  0.299 * r + 0.587 * g + 0.114 * b
+      const cb = -0.169 * r - 0.331 * g + 0.500 * b + 128
+      const cr =  0.500 * r - 0.419 * g - 0.081 * b + 128
+      // Inclusive YCbCr range validated against diverse skin tones
+      if (y > 60 && cb >= 75 && cb <= 130 && cr >= 130 && cr <= 175) skin++
+      total++
+    }
+    return skin / total
   }
 
   private _meanLum(data: Uint8ClampedArray): number {

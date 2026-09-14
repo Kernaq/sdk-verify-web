@@ -265,7 +265,7 @@ export class KernaqVerify extends HTMLElement {
   // glasses-glare heuristic. Shows a single actionable instruction until all
   // checks pass for HOLD_FRAMES consecutive frames, then auto-captures.
 
-  private static HOLD_FRAMES = 12   // ~1.5 s at 120ms per frame
+  private static HOLD_FRAMES = 20   // ~2.4s at 120ms per frame
 
   private _startSelfieAnalysis() {
     this._stopSelfieAnalysis()
@@ -288,7 +288,6 @@ export class KernaqVerify extends HTMLElement {
     const ctx = c.getContext('2d')!
     ctx.drawImage(v, 0, 0)
 
-    // ── Crop to the oval region for quality analysis ──
     const ow = Math.round(W * 0.58)
     const oh = Math.round(ow * (4 / 3))
     const ox = Math.round((W - ow) / 2)
@@ -301,30 +300,37 @@ export class KernaqVerify extends HTMLElement {
     const ovalBlob = await new Promise<Blob | null>(r => ovalCanvas.toBlob(b => r(b), 'image/jpeg', 0.85))
     if (!ovalBlob) return
 
-    // Use capture SDK analyseImage on the oval crop
+    // Stricter thresholds — must be sharp, well-lit, face filling the oval
     const report = await analyseImage(ovalBlob, {
-      minBlurScore:  25,
-      minBrightness: 45,
-      maxBrightness: 215,
-      minFillRatio:  0.10,
+      minBlurScore:  40,
+      minBrightness: 55,
+      maxBrightness: 210,
+      minFillRatio:  0.18,
     })
 
-    // Glasses heuristic: bright band across eye region (top 40% of oval)
-    const eyeH = Math.round(oh * 0.4)
+    // Glasses glare: bright band across top 35% of oval (eye area)
+    const eyeH    = Math.round(oh * 0.35)
     const eyeData = ctx.getImageData(ox, oy, ow, eyeH)
     const eyeLum  = this._meanLum(eyeData.data)
-    const hasGlare = eyeLum > 195
+    const hasGlare = eyeLum > 190
 
-    // Priority-ordered instructions
+    // Hat/occlusion: very dark band across top 15% (forehead)
+    const hatH    = Math.round(oh * 0.15)
+    const hatData = ctx.getImageData(ox, oy, ow, hatH)
+    const hatLum  = this._meanLum(hatData.data)
+    const hasHat  = hatLum < 40
+
     let instruction = ''
-    let passing = report.passed && !hasGlare
+    const passing = report.passed && !hasGlare && !hasHat
 
     if (report.failures.includes('too_dark')) {
       instruction = 'Move to better lighting'
     } else if (report.failures.includes('too_bright')) {
-      instruction = 'Too bright — avoid direct light or flash'
+      instruction = 'Too bright — avoid direct light'
     } else if (report.failures.includes('too_small')) {
       instruction = 'Move closer'
+    } else if (hasHat) {
+      instruction = 'Remove hat or head covering'
     } else if (hasGlare) {
       instruction = 'Remove glasses'
     } else if (report.failures.includes('too_blurry')) {
@@ -427,15 +433,15 @@ export class KernaqVerify extends HTMLElement {
 
     this._clearLivenessTimers()
     this.liveTaskProgress = 0
-    this._render()
 
-    // Progress bar animation
+    // Patch DOM in-place — never call _render() here as it tears down the video element
+    this._patchLivenessDOM()
+
     const dur   = task.duration
     const start = Date.now()
     this.liveTaskProgressTimer = setInterval(() => {
       const elapsed = Date.now() - start
       this.liveTaskProgress = Math.min(100, (elapsed / dur) * 100)
-      // Update in-viewport bar fill
       const bar = this.shadow.querySelector<HTMLElement>('.kq-live-bar-fill')
       if (bar) bar.style.width = `${this.liveTaskProgress}%`
       if (elapsed >= dur) {
@@ -447,23 +453,66 @@ export class KernaqVerify extends HTMLElement {
 
   private _nextLivenessTask() {
     this.liveTaskIdx++
+    this.liveTaskProgress = 0
     if (this.liveTaskIdx >= this.liveTasks.length) {
       this._finishLiveness()
       return
     }
-    this.liveTaskProgress = 0
-    this._render()
-    // Short pause before next task
+    this._patchLivenessDOM()
     this.liveTaskTimer = setTimeout(() => this._startLivenessTask(), 500)
   }
 
   private _finishLiveness() {
     this.liveComplete = true
-    this._render()
+    // Patch overlay to show completion — video stays alive
+    const overlay = this.shadow.querySelector<HTMLElement>('.kq-live-overlay')
+    if (overlay) {
+      overlay.innerHTML = `
+        <div class="kq-live-task-pill">
+          <span class="kq-live-task-text">${this.locale.liveness_complete}</span>
+        </div>`
+    }
+    // Hide Begin button
+    const btn = this.shadow.querySelector<HTMLElement>('[data-action="start-task"]')
+    if (btn) btn.style.display = 'none'
     this.liveTaskTimer = setTimeout(() => {
       this._stopCamera()
       this._next('liveness')
     }, 1000)
+  }
+
+  /** Patches the liveness overlay text + begin button in place without rebuilding the DOM. */
+  private _patchLivenessDOM() {
+    const task     = this.liveTasks[this.liveTaskIdx]
+    const taskDone = this.liveTaskIdx
+    const total    = this.liveTasks.length
+    const active   = this.liveTaskProgressTimer !== null
+
+    // Update task dots
+    this.shadow.querySelectorAll('.kq-task-dot').forEach((dot, i) => {
+      dot.className = `kq-task-dot ${i < taskDone ? 'done' : i === taskDone ? 'active' : ''}`
+    })
+
+    // Update overlay instruction
+    const overlay = this.shadow.querySelector<HTMLElement>('.kq-live-overlay')
+    if (overlay && task) {
+      overlay.innerHTML = `
+        <div class="kq-live-task-pill">
+          <span class="kq-live-task-num">${taskDone + 1}/${total}</span>
+          <span class="kq-live-task-text">${task.label}</span>
+        </div>
+        ${active ? `<div class="kq-live-bar-wrap"><div class="kq-live-bar-fill" style="width:${this.liveTaskProgress}%"></div></div>` : ''}
+      `
+    }
+
+    // Show/hide Begin button
+    const btn = this.shadow.querySelector<HTMLElement>('[data-action="start-task"]')
+    if (btn) {
+      btn.style.display = active ? 'none' : ''
+      if (!active && task) {
+        btn.innerHTML = `${taskDone === 0 ? 'Begin' : 'Next task'}<span style="margin-left:auto">${I.arrow}</span>`
+      }
+    }
   }
 
   private _clearLivenessTimers() {

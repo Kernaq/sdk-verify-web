@@ -99,8 +99,9 @@ export class KernaqVerify extends HTMLElement {
   // camera
   private stream: MediaStream | null = null
   private selfieAnalysisTimer: ReturnType<typeof setInterval> | null = null
-  private selfieReadyFrames = 0          // consecutive frames that pass all checks
-  private selfieCapturing   = false      // prevent double-capture
+  private selfieReadyFrames = 0
+  private selfieCapturing   = false
+  private selfieStartTime   = 0    // wall-clock time analysis started
 
   // liveness
   private liveTasks: typeof TASK_POOL = []
@@ -154,6 +155,7 @@ export class KernaqVerify extends HTMLElement {
     this.errorMsg = ''
     this.selfieReadyFrames = 0
     this.selfieCapturing = false
+    this.selfieStartTime = 0
     // Tear down shadow fully — next open() will rebuild from scratch
     this.shadow.innerHTML = ''
   }
@@ -215,6 +217,7 @@ export class KernaqVerify extends HTMLElement {
     if (step === 'selfie') {
       this.selfieReadyFrames = 0
       this.selfieCapturing = false
+      this.selfieStartTime = 0
       this._startCamera('user', () => this._startSelfieAnalysis())
     }
     if (step === 'liveness') {
@@ -269,6 +272,8 @@ export class KernaqVerify extends HTMLElement {
 
   private _startSelfieAnalysis() {
     this._stopSelfieAnalysis()
+    this.selfieStartTime = Date.now()   // record when analysis began
+    this.selfieReadyFrames = 0
     this.selfieAnalysisTimer = setInterval(() => this._analyseFrame(), 120)
   }
 
@@ -353,6 +358,13 @@ export class KernaqVerify extends HTMLElement {
     }
 
     // ── All checks passed ────────────────────────────────────────────────────
+    // Require at least 2s of camera warmup before counting any passing frames
+    const elapsed = Date.now() - this.selfieStartTime
+    if (elapsed < 2000) {
+      this._updateSelfieOverlay('', false)  // just show "Align your face" during warmup
+      return
+    }
+
     this.selfieReadyFrames++
     this._updateSelfieOverlay('', true)  // pill turns green, shows "Hold still…"
 

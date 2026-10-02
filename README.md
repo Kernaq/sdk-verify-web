@@ -233,13 +233,12 @@ Your endpoint receives `multipart/form-data` with:
 
 | Field | Description |
 |---|---|
-| `document` | Front of document (JPEG) |
-| `document_back` | Back of document (JPEG) |
+| `doc_front` | Front of document (JPEG) |
+| `doc_back` | Back of document (JPEG) |
 | `selfie` | Selfie photo (JPEG) |
 | `document_type` | `national_id` \| `passport` \| `driver_license` \| `alien_card` |
 | `country` | ISO 3166-1 alpha-3 |
 | `reference` | Your reference string |
-| `sandbox` | `'true'` if sandbox mode |
 
 Forward to `POST https://api.identity.kernaq.com/v1/verify` with your secret key in `X-API-Key`.
 

@@ -1,5 +1,5 @@
 {
-  "name": "@kernaq/verify-web",
+  "name": "@kernaq/verify",
   "version": "2.0.2",
   "description": "Drop-in KYC verification UI for web — customizable Web Component for document capture, selfie, and liveness.",
   "main": "dist/index.js",

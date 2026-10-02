@@ -114,6 +114,9 @@ export class KernaqVerify extends HTMLElement {
   private recorderChunks: Blob[] = []
 
   private errorMsg = ''
+  // Tracks blob URLs created for thumbnails so they can be revoked on the
+  // next render cycle, preventing memory leaks.
+  private _thumbUrls: string[] = []
 
   constructor() {
     super()
@@ -156,6 +159,9 @@ export class KernaqVerify extends HTMLElement {
     this.selfieReadyFrames = 0
     this.selfieCapturing = false
     this.selfieStartTime = 0
+    // Revoke any outstanding thumbnail blob URLs
+    for (const url of this._thumbUrls) URL.revokeObjectURL(url)
+    this._thumbUrls = []
     // Tear down shadow fully — next open() will rebuild from scratch
     this.shadow.innerHTML = ''
   }
@@ -222,7 +228,7 @@ export class KernaqVerify extends HTMLElement {
     }
     if (step === 'liveness') {
       this._prepareLiveness()
-      this._startCamera('user')
+      this._startCamera('user', () => this._startLivenessRecording())
     }
     if (step === 'processing') {
       this._submit()
@@ -257,10 +263,48 @@ export class KernaqVerify extends HTMLElement {
   }
 
   private _stopCamera() {
-    this.recorder?.stop()
-    this.recorder = null
+    // Stop the recorder first and wait for onstop to flush final chunks.
+    // We null the recorder ONLY after onstop fires (or immediately if not recording).
+    if (this.recorder && this.recorder.state !== 'inactive') {
+      this.recorder.stop()
+      // recorder is nulled inside onstop handler; don't null here
+    } else {
+      this.recorder = null
+    }
     this.stream?.getTracks().forEach(t => t.stop())
     this.stream = null
+  }
+
+  /** Start recording the liveness camera stream. Call after stream is ready. */
+  private _startLivenessRecording() {
+    if (!this.stream || this.recorder) return
+    this.recorderChunks = []
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9'
+      : MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+        ? 'video/webm;codecs=vp8'
+        : 'video/webm'
+    try {
+      this.recorder = new MediaRecorder(this.stream, { mimeType })
+      this.recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) this.recorderChunks.push(e.data)
+      }
+      this.recorder.onstop = () => {
+        const blob = new Blob(this.recorderChunks, { type: this.recorder?.mimeType ?? 'video/webm' })
+        this.recorderChunks = []
+        this.capture.livenessVideo = blob
+        this.recorder = null
+        // Stop the actual camera tracks now that we have the blob
+        this.stream?.getTracks().forEach(t => t.stop())
+        this.stream = null
+        // Navigate to processing
+        this._goto('processing')
+      }
+      this.recorder.start(100)
+    } catch {
+      // MediaRecorder not supported — proceed without video
+      this.recorder = null
+    }
   }
 
   // ── Selfie real-time analysis ────────────────────────────────────────────────
@@ -525,7 +569,6 @@ export class KernaqVerify extends HTMLElement {
 
   private _finishLiveness() {
     this.liveComplete = true
-    // Patch overlay to show completion — video stays alive
     const overlay = this.shadow.querySelector<HTMLElement>('.kq-live-overlay')
     if (overlay) {
       overlay.innerHTML = `
@@ -533,12 +576,18 @@ export class KernaqVerify extends HTMLElement {
           <span class="kq-live-task-text">${this.locale.liveness_complete}</span>
         </div>`
     }
-    // Hide Begin button
     const btn = this.shadow.querySelector<HTMLElement>('[data-action="start-task"]')
     if (btn) btn.style.display = 'none'
+
     this.liveTaskTimer = setTimeout(() => {
-      this._stopCamera()
-      this._next('liveness')
+      if (this.recorder && this.recorder.state !== 'inactive') {
+        // Stop recorder — onstop will collect the blob and call _goto('processing')
+        this.recorder.stop()
+      } else {
+        // No recorder (browser doesn't support MediaRecorder) — navigate directly
+        this._stopCamera()
+        this._next('liveness')
+      }
     }, 1000)
   }
 
@@ -591,20 +640,24 @@ export class KernaqVerify extends HTMLElement {
     }
 
     const base = (this.config.backendUrl ?? 'https://api.identity.kernaq.com/v1').replace(/\/$/, '')
+    const endpoint = this.config.sandbox ? '/verify/sandbox' : '/verify'
     const form = new FormData()
-    form.append('document',           docFrontBlob,       'doc_front.jpg')
-    if (docBackBlob) form.append('document_back', docBackBlob, 'doc_back.jpg')
+    form.append('doc_front',           docFrontBlob,       'doc_front.jpg')
+    if (docBackBlob) form.append('doc_back', docBackBlob, 'doc_back.jpg')
     form.append('selfie',             selfieBlob,         'selfie.jpg')
     form.append('document_type',      this.config.documentTypes?.[0] ?? 'national_id')
     form.append('country',            this.config.country ?? 'KEN')
     form.append('reference',          this.config.reference ?? `kq_${Date.now()}`)
-    if (this.config.sandbox) form.append('sandbox', 'true')
+    // Attach liveness video if captured
+    if (this.capture.livenessVideo) {
+      form.append('video', this.capture.livenessVideo, 'liveness.webm')
+    }
 
     const headers: HeadersInit = {}
     if (this.config.apiKey) headers['X-API-Key'] = this.config.apiKey
 
     try {
-      const res  = await fetch(`${base}/verify`, { method: 'POST', headers, body: form })
+      const res  = await fetch(`${base}${endpoint}`, { method: 'POST', headers, body: form })
       const body = await res.json() as Record<string, unknown>
       if (!res.ok) throw new Error((body['message'] as string) ?? `HTTP ${res.status}`)
 
@@ -628,6 +681,11 @@ export class KernaqVerify extends HTMLElement {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   private _render() {
+    // Revoke any blob URLs created for thumbnails in the previous render to
+    // prevent memory leaks (createObjectURL pins the blob in memory).
+    for (const url of this._thumbUrls) URL.revokeObjectURL(url)
+    this._thumbUrls = []
+
     const theme = this.config.theme ?? {}
     const vars  = [
       theme.accentColor     ? `--kernaq-accent-color: ${theme.accentColor};`         : '',
@@ -915,6 +973,7 @@ export class KernaqVerify extends HTMLElement {
   private _capturedThumb(blob: Blob | undefined, label: string) {
     if (!blob) return ''
     const url = URL.createObjectURL(blob)
+    this._thumbUrls.push(url)  // tracked for revocation on next render
     return `
       <div class="kq-thumb-row">
         <img class="kq-thumb" src="${url}" alt="${label}" />
@@ -1006,6 +1065,9 @@ export class KernaqVerify extends HTMLElement {
   }
 
   private _setError(msg: string) {
+    // Stop the selfie analysis interval before re-rendering — otherwise the
+    // interval fires again during the render, finds a new DOM, and loops.
+    this._stopSelfieAnalysis()
     this.errorMsg = msg
     this._render()
   }
